@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    type: org.springframework.jdbc.datasource.SimpleDriverDataSource
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+    show-sql: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-test-master.yaml
+    contexts: test

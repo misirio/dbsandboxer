@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-product
+      author: misir
+      changes:
+        - createTable:
+            tableName: product
+            columns:
+              - column: { name: id, type: BIGSERIAL, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: sku, type: VARCHAR(64), constraints: { nullable: false, unique: true } }
+              - column: { name: name, type: VARCHAR(255), constraints: { nullable: false } }
+              - column: { name: price_cents, type: INT, constraints: { nullable: false } }
+  - changeSet:
+      id: 002-create-order
+      author: misir
+      changes:
+        - createTable:
+            tableName: purchase_order
+            columns:
+              - column: { name: id, type: BIGSERIAL, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: product_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: quantity, type: INT, constraints: { nullable: false } }
+              - column: { name: total_cents, type: INT, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: purchase_order
+            baseColumnNames: product_id
+            referencedTableName: product
+            referencedColumnNames: id
+            constraintName: fk_purchase_order_product
+

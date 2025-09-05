@@ -1,0 +1,52 @@
+project:
+  name: dbsandboxer
+  description: Database Sandboxer - A test isolation library for Spring Boot
+  longDescription: |
+    DBSandboxer provides test isolation for Spring Boot applications by creating 
+    temporary sandboxed database instances for integration tests.
+  authors:
+    - Fethullah Misir
+  license: Apache-2.0
+  links:
+    homepage: https://github.com/misirio/dbsandboxer
+  inceptionYear: "2025"
+  stereotype: NONE
+  languages:
+    java:
+      groupId: io.misir
+
+release:
+  github:
+    owner: misirio
+    overwrite: false
+    skipRelease: false
+    draft: false
+    skipTag: false
+    releaseName: '{{tagName}}'
+    changelog:
+      formatted: ALWAYS
+      preset: conventional-commits
+      contributors:
+        format: '- {{contributorName}}{{#contributorUsernameAsLink}} ({{.}}){{/contributorUsernameAsLink}}'
+      hide:
+        contributors:
+          - 'GitHub'
+    issues:
+      enabled: true
+
+
+signing:
+  active: ALWAYS
+  armored: true
+
+deploy:
+  maven:
+    mavenCentral:
+      sonatype:
+        applyMavenCentralRules: true
+        active: ALWAYS
+        url: https://central.sonatype.com/api/v1/publisher
+        authorization: BASIC
+        namespace: io.misir
+        stagingRepositories:
+          - target/staging-deploy

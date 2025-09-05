@@ -1,0 +1,48 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.misir</groupId>
+        <artifactId>dbsandboxer</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>dbsandboxer-spring-boot-starter-test</artifactId>
+    <name>dbsandboxer-spring-boot-starter-test</name>
+    <packaging>jar</packaging>
+    <description>Spring Boot test integration for database sandboxing</description>
+    <url>https://github.com/misirio/dbsandboxer</url>
+    <properties>
+        <spring.version>6.1.10</spring.version>
+        <junit-jupiter.version>5.11.4</junit-jupiter.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.misir</groupId>
+            <artifactId>dbsandboxer-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit-jupiter.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+</project>
