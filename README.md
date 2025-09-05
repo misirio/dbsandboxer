@@ -1,184 +1,181 @@
 # DbSandboxer
 
-A Java library for isolated database testing using the template database pattern. Create fresh database copies for each test to ensure complete test isolation and reproducibility.
+**Fast, isolated database testing for Spring Boot applications using PostgreSQL's template database feature.**
 
-## Features
+## The Problem
 
-- **Test Isolation**: Each test runs in its own database copy
-- **Fast Setup**: Uses PostgreSQL template databases for quick provisioning
-- **Spring Boot Integration**: Seamless integration with Spring Boot tests via JUnit 5
-- **Zero Test Pollution**: Tests never interfere with each other
+Testing with databases is painful:
+- **@Transactional rollbacks** hide real database behavior (triggers, constraints don't fire)
+- **Truncating tables** is slow and error-prone with complex schemas
+- **H2/in-memory databases** don't catch PostgreSQL-specific issues
+- **Shared test databases** cause flaky tests due to data pollution
 
-## What It Does
+## The Solution
 
-DbSandboxer ensures each test runs with a clean database. Here's what happens:
+DbSandboxer gives each test its own database copy in ~50ms using PostgreSQL's template databases:
 
 ```java
-@SpringBootTest
-@EnableDbSandboxer  // ← Activates database sandboxing
-class ProductServiceTest {
-    
-    @Test
-    void test1_addProduct() {
-        // Starting with clean database + fixtures
-        productRepo.save(new Product("Laptop", 999));
-        assertThat(productRepo.count()).isEqualTo(4);  // 3 fixtures + 1 new
-    }
-    
-    @Test
-    void test2_verifyIsolation() {
-        // Database is reset! The laptop from test1 doesn't exist
-        assertThat(productRepo.count()).isEqualTo(3);  // Only fixtures
-        assertThat(productRepo.findByName("Laptop")).isEmpty();
-    }
+@Test
+void test1_createProduct() {
+    // Starts with clean database
+    productRepo.save(new Product("Laptop", 999));
+    assertThat(productRepo.count()).isEqualTo(1);
+}
+
+@Test
+void test2_verifyIsolation() {
+    // Fresh database - no laptop from test1!
+    assertThat(productRepo.findByName("Laptop")).isEmpty();
+    assertThat(productRepo.count()).isEqualTo(0);
 }
 ```
 
-**Without DbSandboxer**: test2 would fail because the laptop from test1 pollutes the database  
-**With DbSandboxer**: Each test starts fresh, tests pass regardless of execution order
+## Why DbSandboxer?
+
+| Approach | Speed | Real DB Behavior | Maintenance | Isolation |
+|----------|-------|------------------|-------------|-----------|
+| @Transactional | ✅ Fast | ❌ Fake | ✅ None | ⚠️ Limited |
+| Truncate/Delete | ❌ Slow (grows with schema) | ✅ Real | ❌ High | ✅ Full |
+| H2 In-Memory | ✅ Fast | ❌ Different DB | ✅ Low | ✅ Full |
+| **DbSandboxer** | ✅ Fast (~50ms) | ✅ Real PostgreSQL | ✅ None | ✅ Full |
 
 
 ## Quick Start
 
-### 1. Add Maven Dependency
+### 1. Add Dependency
 
 ```xml
 <dependency>
     <groupId>io.misir</groupId>
     <artifactId>dbsandboxer-spring-boot-starter-test</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
     <scope>test</scope>
 </dependency>
 ```
 
-### 2. Configure Your Test DataSource
+### 2. Configure Test Database
 
-⚠️ **Important**: DbSandboxer requires `SimpleDriverDataSource` because it needs to drop and recreate databases. Connection pools like HikariCP will hold stale connections and cause errors.
-
-Create `src/test/resources/application.yaml`:
+Add to `src/test/resources/application.yaml`:
 
 ```yaml
 spring:
   datasource:
-    # REQUIRED: Must use SimpleDriverDataSource (not HikariCP)
+    # Required: SimpleDriverDataSource
     type: org.springframework.jdbc.datasource.SimpleDriverDataSource
-    
 ```
 
-### 3. Enable DbSandboxer in Your Test
+### 3. Enable in Tests
 
 ```java
-@SpringBootTest
-@EnableDbSandboxer  // ← Add this annotation
-public class MyIntegrationTest {
+@TestConfiguration(proxyBeanMethods = false)
+public class TestConfig {
+    @Bean
+    @ServiceConnection
+    public PostgreSQLContainer<?> postgres() {
+        return new PostgreSQLContainer<>("postgres:16-alpine");
+    }
+}
+
+@SpringBootTest(classes = TestConfig.class)
+@EnableDbSandboxer
+class OrderServiceTest {
     
     @Autowired
-    private MyRepository repository;
+    private OrderRepository orderRepo;
     
     @Test
-    void testDatabaseOperation() {
-        // Each test gets a fresh database copy
-        repository.save(new Entity());
-        // Changes are isolated to this test only
+    void createOrder_persistsSuccessfully() {
+        // Each test starts with fresh database
+        Order order = new Order("ORD-001", 299.99);
+        orderRepo.save(order);
+        
+        assertThat(orderRepo.count()).isEqualTo(1);
+        assertThat(orderRepo.findById(order.getId())).isPresent();
+    }
+    
+    @Test
+    void deleteOrder_removesFromDatabase() {
+        // No data from previous test - complete isolation
+        assertThat(orderRepo.count()).isEqualTo(0);
+        
+        Order order = orderRepo.save(new Order("ORD-002", 199.99));
+        orderRepo.delete(order);
+        
+        assertThat(orderRepo.count()).isEqualTo(0);
     }
 }
 ```
 
+Check out the [Example project](examples/spring-boot-example) for a complete example.
+
 ## How It Works
 
-1. **Template Creation**: DbSandboxer creates a template database with your schema and test data
-2. **Test Execution**: For each test, it recreates the database from the template
-3. **Isolation**: Each test runs in complete isolation
+1. **Template Creation**: Before tests run, DbSandboxer creates a PostgreSQL template database with your schema
+2. **Fast Cloning**: Each test gets a fresh copy via `CREATE DATABASE ... WITH TEMPLATE` (file-level copy, not row-by-row)
+3. **Automatic Cleanup**: Databases are dropped after each test
 
-Check out [ExampleIntegration1Test.java](examples/spring-boot-example) for a complete example with Liquibase and Testcontainers.
+This approach is blazing fast because PostgreSQL copies database files directly rather than executing SQL statements.
 
-## Why Template Databases?
+## Performance
 
-### ❌ Common Approaches & Their Problems
+- **Template creation**: One-time cost at test suite start
+- **Per-test overhead**: ~50ms regardless of database size
+- **Cleanup**: Instant (DROP DATABASE)
 
-**@Transactional Tests**
-- Rollback hides real behavior (triggers, constraints don't fire normally)
-- Can't test multi-transaction scenarios
-- Discouraged by Spring team - tests don't reflect production behavior
-
-**Truncate/Delete After Each Test**
-- Slow with many tables (cascading deletes, foreign keys)
-- Error-prone - miss one table and tests fail
-- Maintenance nightmare as schema grows
-
-**In-Memory Databases (H2)**
-- Different SQL dialect than production
-- Missing PostgreSQL-specific features
-- False positives/negatives in tests
-
-### ✅ Template Database Approach (DbSandboxer)
-
-- **Constant Speed**: ~50ms regardless of schema size (copies files, not data)
-- **Real Database**: Tests run on actual PostgreSQL, catching real issues
-- **Zero Maintenance**: No cleanup code, no table lists to maintain
-- **Production-Like**: Triggers, constraints, procedures work exactly as in production
-
+Compare to truncating 50 tables with foreign keys: often 500ms+
 
 ## Requirements
 
-- Java 17 or higher
+- Java 17+
 - PostgreSQL 12+
 - Spring Boot 2.7+ (for Spring Boot integration)
 
 ## Modules
 
-- **dbsandboxer-core**: Core API and PostgreSQL provider
-- **dbsandboxer-spring-boot-starter-test**: Spring Boot test integration
-- **examples**: Sample applications demonstrating usage
+- `dbsandboxer-core` - Core functionality
+- `dbsandboxer-spring-boot-starter-test` - Spring Boot integration
+- `examples` - Complete working examples
 
-## Building from Source
+## Running the Examples
 
 ```bash
+# Clone and build
+git clone https://github.com/misirio/dbsandboxer.git
+cd dbsandboxer
 mvn clean install
-```
 
-## Running Tests
-
-```bash
-mvn test
-```
-
-## Running the Example
-
-The project includes a complete example demonstrating DbSandboxer with Spring Boot, JPA, and Liquibase.
-
-### Prerequisites
-- Docker (for running PostgreSQL via Testcontainers)
-- Java 17+
-- Maven 3.6+
-
-### Running Example Tests
-
-```bash
-# Build the project
-mvn clean package
-
-# Run the example tests
+# Run example tests
 cd examples/spring-boot-example
 mvn test
 ```
 
-The example demonstrates:
-- Database schema migration with Liquibase
-- Test fixture loading
-- Complete test isolation - each test gets a fresh database
-- JPA entity persistence and retrieval
-- Verification that data changes don't affect other tests
+The examples demonstrate:
+- Liquibase migrations
+- Test fixtures
+- JPA integration
+- Complete test isolation
 
-Check out [ExampleIntegration1Test.java](examples/spring-boot-example/src/test/java/io/misir/dbsandboxer/examples/boot/ExampleIntegration1Test.java) to see how tests remain isolated.
+## FAQ
+
+**Q: Why not use @DirtiesContext?**  
+A: That recreates the entire Spring context (slow). DbSandboxer only resets the database.
+
+**Q: Can I use connection pools?**  
+A: No, use SimpleDriverDataSource. Pools hold connections to dropped databases.
+
+**Q: Does it work with Flyway/Liquibase?**  
+A: Yes! Migrations run once during template creation.
+
+**Q: What about test fixtures?**  
+A: Load them during template creation - they'll be in every test's copy.
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) file for details.
+Apache License 2.0
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please submit a Pull Request.
 
 ## Author
 
