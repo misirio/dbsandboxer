@@ -3,7 +3,9 @@
 **Fast, isolated database testing for Spring Boot applications using PostgreSQL's template database feature.**
 
 
-![DbSandboxer Speed Showcase - 100 tests running in IntelliJ after initial Spring Boot load](docs/speed-showcase.gif)
+Demo of 100 integration test executions with fresh PostgreSQL databases per test, post Spring Boot initialization:  
+
+![Speed showcase](docs/speed-showcase.gif)
 
 ## The Problem
 
