@@ -26,8 +26,7 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
             p = appCtx.getBean(SandboxDatabaseProvider.class);
         } catch (Exception noBean) {
             // Fallback: derive a PostgresProvider from DataSource URL + annotation config
-            EnableDbSandboxer cfg =
-                    ctx.getRequiredTestClass().getAnnotation(EnableDbSandboxer.class);
+            EnableDbSandboxer cfg = resolveConfiguration(ctx);
             DbUrlParts url = inspectUrl(ds);
             p =
                     new PostgresSandboxDatabaseProvider(
@@ -49,6 +48,38 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
             throw new SandboxException("No PostgreSQL database provider available");
         }
         provider.rebuildSandbox();
+    }
+
+    private static EnableDbSandboxer resolveConfiguration(ExtensionContext context) {
+        EnableDbSandboxer cfg =
+                context.getTestClass().map(DbSandboxSpringExtension::findAnnotation).orElse(null);
+        if (cfg != null) {
+            return cfg;
+        }
+
+        ExtensionContext current = context.getParent().orElse(null);
+        while (current != null) {
+            cfg = current.getTestClass().map(DbSandboxSpringExtension::findAnnotation).orElse(null);
+            if (cfg != null) {
+                return cfg;
+            }
+            current = current.getParent().orElse(null);
+        }
+
+        throw new SandboxException(
+                "@EnableDbSandboxer annotation not found. Please annotate your test class.");
+    }
+
+    private static EnableDbSandboxer findAnnotation(Class<?> clazz) {
+        Class<?> current = clazz;
+        while (current != null) {
+            EnableDbSandboxer annotation = current.getAnnotation(EnableDbSandboxer.class);
+            if (annotation != null) {
+                return annotation;
+            }
+            current = current.getEnclosingClass();
+        }
+        return null;
     }
 
     private static DbUrlParts inspectUrl(DataSource ds) throws SQLException {
