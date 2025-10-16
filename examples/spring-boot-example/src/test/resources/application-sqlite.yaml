@@ -1,5 +1,6 @@
 spring:
   datasource:
+    url: jdbc:sqlite:target/example-sqlite.db
     driver-class-name: org.sqlite.JDBC
     type: org.springframework.jdbc.datasource.SimpleDriverDataSource
     hikari:

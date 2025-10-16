@@ -7,36 +7,17 @@ import io.misir.dbsandboxer.examples.boot.domain.PurchaseOrder;
 import io.misir.dbsandboxer.examples.boot.repository.ProductRepository;
 import io.misir.dbsandboxer.examples.boot.repository.PurchaseOrderRepository;
 import io.misir.dbsandboxer.starter.EnableDbSandboxer;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest(classes = Application.class)
 @EnableDbSandboxer(templateDatabaseName = "example_sqlite_template")
-@TestPropertySource(locations = "classpath:application-sqlite.yaml")
 @ActiveProfiles("sqlite")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ExampleSqliteIntegrationTest {
-
-    private static Path databaseFile;
-
-    @DynamicPropertySource
-    static void sqliteDataSource(DynamicPropertyRegistry registry) throws IOException {
-        if (databaseFile == null) {
-            Path sandboxDir = Files.createTempDirectory("dbsandboxer-example-sqlite-");
-            databaseFile = sandboxDir.resolve("example-sqlite.db");
-        }
-        Path sqlitePath = databaseFile.toAbsolutePath();
-        registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + sqlitePath);
-    }
 
     @Autowired private ProductRepository products;
 
