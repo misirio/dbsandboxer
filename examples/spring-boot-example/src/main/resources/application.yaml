@@ -13,6 +13,6 @@ spring:
         format_sql: true
     show-sql: false
   liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.yaml
+    change-log: classpath:db/changelog/postgres/db.changelog-postgres-master.yaml
     enabled: true
 

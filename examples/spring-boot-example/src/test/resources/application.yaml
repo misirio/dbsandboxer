@@ -11,5 +11,5 @@ spring:
         format_sql: false
     show-sql: false
   liquibase:
-    change-log: classpath:db/changelog/db.changelog-test-master.yaml
+    change-log: classpath:db/changelog/postgres/db.changelog-postgres-test-master.yaml
     contexts: test

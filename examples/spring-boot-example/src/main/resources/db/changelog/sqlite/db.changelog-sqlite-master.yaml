@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: sqlite-001-create-product
+      author: misir
+      changes:
+        - createTable:
+            tableName: product
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: sku
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price_cents
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: sqlite-002-create-order
+      author: misir
+      changes:
+        - createTable:
+            tableName: purchase_order
+            columns:
+              - column:
+                  name: id
+                  type: INTEGER
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: product_id
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_purchase_order_product
+                    references: product(id)
+              - column:
+                  name: quantity
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: total_cents
+                  type: INTEGER
+                  constraints:
+                    nullable: false

@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/sqlite/db.changelog-sqlite-master.yaml
+  - changeSet:
+      id: sqlite-test-fixtures
+      author: misir
+      context: test
+      runInTransaction: false
+      changes:
+        - sqlFile:
+            path: ../sql/sqlite/test-fixtures.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            endDelimiter: ;

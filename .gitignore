@@ -32,3 +32,4 @@ jreleaser.properties
 .claude
 # Flatten Maven Plugin
 .flattened-pom.xml
+databasechangelog.csv

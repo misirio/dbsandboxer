@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    type: org.springframework.jdbc.datasource.SimpleDriverDataSource
+    hikari:
+      maximum-pool-size: 1
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        format_sql: false
+    show-sql: false
+  liquibase:
+    change-log: classpath:db/changelog/sqlite/db.changelog-sqlite-test-master.yaml
+    contexts: test
