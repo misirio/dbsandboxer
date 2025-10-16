@@ -3,12 +3,10 @@ package io.misir.dbsandboxer.core.providers.postgres;
 import static org.assertj.core.api.Assertions.*;
 
 import io.misir.dbsandboxer.core.api.SandboxException;
-import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.*;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -268,13 +266,6 @@ class PostgresSandboxDatabaseProviderTest {
             provider.prepareSandbox();
             assertThat(templateExists()).isTrue();
 
-            // Reset the static flag to simulate a new JVM instance
-            Field templateReadyField =
-                    PostgresSandboxDatabaseProvider.class.getDeclaredField("TEMPLATE_READY");
-            templateReadyField.setAccessible(true);
-            AtomicBoolean templateReady = (AtomicBoolean) templateReadyField.get(null);
-            templateReady.set(false);
-
             PostgresSandboxDatabaseProvider newProvider =
                     new PostgresSandboxDatabaseProvider(
                             postgres.getHost(),
@@ -287,6 +278,20 @@ class PostgresSandboxDatabaseProviderTest {
 
             newProvider.prepareSandbox();
 
+            assertThat(templateExists()).isTrue();
+        }
+
+        @Test
+        @DisplayName("cleanupSandbox should drop the template database")
+        void cleanupSandboxShouldDropTemplateDatabase() throws Exception {
+            provider.prepareSandbox();
+            assertThat(templateExists()).isTrue();
+
+            provider.cleanupSandbox();
+
+            assertThat(templateExists()).isFalse();
+
+            provider.prepareSandbox();
             assertThat(templateExists()).isTrue();
         }
 

@@ -3,7 +3,6 @@ package io.misir.dbsandboxer.core.providers.sqlite;
 import static org.assertj.core.api.Assertions.*;
 
 import io.misir.dbsandboxer.core.api.SandboxException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -12,7 +11,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +27,6 @@ class SqliteSandboxDatabaseProviderTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        resetTemplateReadyFlag();
         primaryDb = tempDir.resolve("primary.db");
         templateDb = tempDir.resolve("template.db");
         createPrimaryDatabase();
@@ -96,6 +93,24 @@ class SqliteSandboxDatabaseProviderTest {
                 .hasMessageContaining("Primary SQLite database");
     }
 
+    @Test
+    @DisplayName("cleanupSandbox should delete template file")
+    void cleanupSandboxShouldDeleteTemplateFile() throws Exception {
+        provider.prepareSandbox();
+        provider.rebuildSandbox();
+
+        assertThat(Files.exists(templateDb)).isTrue();
+        assertThat(Files.exists(primaryDb)).isTrue();
+
+        provider.cleanupSandbox();
+
+        assertThat(Files.exists(templateDb)).isFalse();
+        assertThat(Files.exists(primaryDb)).isTrue();
+
+        provider.prepareSandbox();
+        assertThat(Files.exists(templateDb)).isTrue();
+    }
+
     private void createPrimaryDatabase() throws SQLException {
         try (Connection connection = connect(primaryDb);
                 Statement stmt = connection.createStatement()) {
@@ -148,12 +163,5 @@ class SqliteSandboxDatabaseProviderTest {
 
     private Connection connect(Path database) throws SQLException {
         return DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath());
-    }
-
-    private void resetTemplateReadyFlag() throws Exception {
-        Field field = SqliteSandboxDatabaseProvider.class.getDeclaredField("TEMPLATE_READY");
-        field.setAccessible(true);
-        AtomicBoolean flag = (AtomicBoolean) field.get(null);
-        flag.set(false);
     }
 }

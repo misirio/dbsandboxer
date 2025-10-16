@@ -10,27 +10,31 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import javax.sql.DataSource;
+import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-public final class DbSandboxSpringExtension implements BeforeAllCallback, BeforeEachCallback {
+public final class DbSandboxSpringExtension
+        implements BeforeAllCallback, BeforeEachCallback, AfterAllCallback {
 
     private SandboxDatabaseProvider provider;
+    private EnableDbSandboxer configuration;
 
     @Override
     public void beforeAll(ExtensionContext ctx) throws Exception {
         ApplicationContext appCtx = SpringExtension.getApplicationContext(ctx);
         DataSource ds = appCtx.getBean(DataSource.class);
+        EnableDbSandboxer cfg = resolveConfiguration(ctx);
+        this.configuration = cfg;
         // Prefer an existing DatabaseProvider bean if available
         SandboxDatabaseProvider p;
         try {
             p = appCtx.getBean(SandboxDatabaseProvider.class);
         } catch (Exception noBean) {
             // Fallback: derive provider from DataSource URL + annotation config
-            EnableDbSandboxer cfg = resolveConfiguration(ctx);
             DbUrlParts url = inspectUrl(ds);
             switch (url.type()) {
                 case POSTGRESQL ->
@@ -44,7 +48,9 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
                                         url.primaryDatabaseName(),
                                         cfg.templateDatabaseName());
                 case SQLITE -> {
-                    Path template = resolveTemplatePath(url.sqlitePath(), cfg);
+                    Path template =
+                            resolveTemplatePath(
+                                    url.sqlitePath(), cfg.templateDatabaseName());
                     p = new SqliteSandboxDatabaseProvider(url.sqlitePath(), template);
                 }
                 default ->
@@ -62,6 +68,15 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
             throw new SandboxException("No SandboxDatabaseProvider available");
         }
         provider.rebuildSandbox();
+    }
+
+    @Override
+    public void afterAll(ExtensionContext context) {
+        if (provider != null
+                && configuration != null
+                && configuration.dropTemplateDatabase()) {
+            provider.cleanupSandbox();
+        }
     }
 
     private static EnableDbSandboxer resolveConfiguration(ExtensionContext context) {
@@ -158,18 +173,17 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
         }
     }
 
-    private static Path resolveTemplatePath(Path databaseFile, EnableDbSandboxer cfg) {
-        String candidate = cfg.sqliteTemplateFile();
+    private static Path resolveTemplatePath(Path databaseFile, String templateName) {
+        String candidate = templateName;
         if (candidate == null || candidate.isBlank()) {
-            candidate = cfg.templateDatabaseName();
-            if (candidate == null || candidate.isBlank()) {
-                candidate = "template_database.db";
-            } else if (!candidate.contains(".")) {
-                candidate = candidate + ".db";
-            }
+            candidate = "template_database";
         }
         try {
             Path template = Path.of(candidate);
+            Path fileName = template.getFileName();
+            if (fileName != null && !fileName.toString().contains(".")) {
+                template = template.resolveSibling(fileName + ".db");
+            }
             Path normalizedDb = databaseFile.toAbsolutePath().normalize();
             if (!template.isAbsolute()) {
                 template = normalizedDb.resolveSibling(template).normalize();

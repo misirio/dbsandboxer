@@ -59,20 +59,24 @@ public @interface EnableDbSandboxer {
     /**
      * The name of the template database.
      *
-     * <p>This database will be created once with your schema and test data, then used as a template
-     * for creating test database copies.
+     * <p>For PostgreSQL this value is used as the template database identifier. For SQLite the same
+     * value determines the template database file name. When running against SQLite and no file
+     * extension is provided, a <code>.db</code> suffix is appended automatically and the file is
+     * created next to the primary database file.
      *
      * @return the template database name, defaults to "template_database"
      */
     String templateDatabaseName() default "template_database";
 
     /**
-     * The template database file for SQLite providers.
+     * Controls whether the template database (or SQLite template file) is removed after the test
+     * class finishes.
      *
-     * <p>If left empty, the template file will be placed next to the SQLite database file using
-     * {@link #templateDatabaseName()} (with a <code>.db</code> suffix when no extension is provided).
+     * <p>By default the template is dropped/deleted to avoid leaving artefacts behind. Set this to
+     * {@code false} only when you intentionally want to inspect the template database after the
+     * tests.
      *
-     * @return the SQLite template file path, relative to the database file's directory by default
+     * @return {@code true} to drop/delete the template when tests are finished
      */
-    String sqliteTemplateFile() default "";
+    boolean dropTemplateDatabase() default true;
 }

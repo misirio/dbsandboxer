@@ -30,4 +30,14 @@ public interface SandboxDatabaseProvider {
      * @throws SandboxException if the sandbox rebuild fails
      */
     void rebuildSandbox() throws SandboxException;
+
+    /**
+     * Cleans up any resources created by the sandbox after the test suite finishes.
+     *
+     * <p>The default implementation is a no-op so providers that do not need explicit cleanup can
+     * simply inherit it.
+     */
+    default void cleanupSandbox() throws SandboxException {
+        // no-op by default
+    }
 }

@@ -135,9 +135,10 @@ public class TestConfig {
 ```
 
 When using the Spring Boot starter without defining your own provider bean, DbSandboxer will
-automatically detect a SQLite `DataSource`. You can customize the template file location with the
-`sqliteTemplateFile` attribute on `@EnableDbSandboxer`. If not specified, the template is created
-next to the database file using the value from `templateDatabaseName` and a `.db` extension.
+automatically detect a SQLite `DataSource`. The template file name is derived from
+`templateDatabaseName` (a `.db` suffix is added when none is provided) and created next to the
+database file. Set `dropTemplateDatabase = false` on `@EnableDbSandboxer` if you want to keep the
+template around for inspection after the test suite.
 
 ## How It Works
 

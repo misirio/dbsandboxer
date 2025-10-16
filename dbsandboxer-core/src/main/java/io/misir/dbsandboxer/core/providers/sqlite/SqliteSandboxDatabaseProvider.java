@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,10 +24,13 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
     private static final Logger log =
             LoggerFactory.getLogger(SqliteSandboxDatabaseProvider.class);
 
-    private static final AtomicBoolean TEMPLATE_READY = new AtomicBoolean(false);
+    private static final ConcurrentHashMap<Path, AtomicBoolean> TEMPLATE_STATES =
+            new ConcurrentHashMap<>();
 
     private final Path databaseFile;
     private final Path templateFile;
+    private final Path templateKey;
+    private final AtomicBoolean templateReady;
 
     /**
      * Creates a new SQLite sandbox database provider.
@@ -35,12 +39,22 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
      * @param templateFile the template database file that will be copied before each test
      */
     public SqliteSandboxDatabaseProvider(Path databaseFile, Path templateFile) {
-        this.databaseFile = Objects.requireNonNull(databaseFile, "databaseFile cannot be null");
-        this.templateFile = Objects.requireNonNull(templateFile, "templateFile cannot be null");
-        if (databaseFile.equals(templateFile)) {
+        Path normalizedDatabase =
+                Objects.requireNonNull(databaseFile, "databaseFile cannot be null")
+                        .toAbsolutePath()
+                        .normalize();
+        Path normalizedTemplate =
+                Objects.requireNonNull(templateFile, "templateFile cannot be null")
+                        .toAbsolutePath()
+                        .normalize();
+        if (normalizedDatabase.equals(normalizedTemplate)) {
             throw new IllegalArgumentException(
                     "databaseFile and templateFile must be different files");
         }
+        this.databaseFile = normalizedDatabase;
+        this.templateFile = normalizedTemplate;
+        this.templateKey = normalizedTemplate;
+        this.templateReady = TEMPLATE_STATES.computeIfAbsent(this.templateKey, key -> new AtomicBoolean(false));
     }
 
     /**
@@ -55,17 +69,17 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
 
     @Override
     public void prepareSandbox() {
-        if (TEMPLATE_READY.get()) {
+        if (templateReady.get()) {
             return;
         }
-        synchronized (TEMPLATE_READY) {
-            if (TEMPLATE_READY.get()) {
+        synchronized (templateReady) {
+            if (templateReady.get()) {
                 return;
             }
             if (!Files.exists(templateFile)) {
                 createTemplate();
             }
-            TEMPLATE_READY.set(true);
+            templateReady.set(true);
         }
     }
 
@@ -81,6 +95,20 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
             copyDatabaseArtifacts(templateFile, databaseFile);
         } catch (IOException e) {
             throw new SandboxException("Failed to rebuild SQLite sandbox database", e);
+        }
+    }
+
+    @Override
+    public void cleanupSandbox() {
+        synchronized (templateReady) {
+            templateReady.set(false);
+        }
+        try {
+            deleteDatabaseArtifacts(templateFile);
+        } catch (IOException e) {
+            throw new SandboxException("Failed to clean up SQLite sandbox database", e);
+        } finally {
+            TEMPLATE_STATES.remove(templateKey, templateReady);
         }
     }
 
