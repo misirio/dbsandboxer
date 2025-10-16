@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,13 +23,10 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
     private static final Logger log =
             LoggerFactory.getLogger(SqliteSandboxDatabaseProvider.class);
 
-    private static final ConcurrentHashMap<Path, AtomicBoolean> TEMPLATE_STATES =
-            new ConcurrentHashMap<>();
+    private static final AtomicBoolean TEMPLATE_READY = new AtomicBoolean(false);
 
     private final Path databaseFile;
     private final Path templateFile;
-    private final Path templateKey;
-    private final AtomicBoolean templateReady;
 
     /**
      * Creates a new SQLite sandbox database provider.
@@ -53,8 +49,6 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
         }
         this.databaseFile = normalizedDatabase;
         this.templateFile = normalizedTemplate;
-        this.templateKey = normalizedTemplate;
-        this.templateReady = TEMPLATE_STATES.computeIfAbsent(this.templateKey, key -> new AtomicBoolean(false));
     }
 
     /**
@@ -69,17 +63,17 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
 
     @Override
     public void prepareSandbox() {
-        if (templateReady.get()) {
+        if (TEMPLATE_READY.get() && Files.exists(templateFile)) {
             return;
         }
-        synchronized (templateReady) {
-            if (templateReady.get()) {
+        synchronized (TEMPLATE_READY) {
+            if (TEMPLATE_READY.get() && Files.exists(templateFile)) {
                 return;
             }
             if (!Files.exists(templateFile)) {
                 createTemplate();
             }
-            templateReady.set(true);
+            TEMPLATE_READY.set(true);
         }
     }
 
@@ -100,15 +94,13 @@ public final class SqliteSandboxDatabaseProvider implements SandboxDatabaseProvi
 
     @Override
     public void cleanupSandbox() {
-        synchronized (templateReady) {
-            templateReady.set(false);
+        synchronized (TEMPLATE_READY) {
+            TEMPLATE_READY.set(false);
         }
         try {
             deleteDatabaseArtifacts(templateFile);
         } catch (IOException e) {
             throw new SandboxException("Failed to clean up SQLite sandbox database", e);
-        } finally {
-            TEMPLATE_STATES.remove(templateKey, templateReady);
         }
     }
 

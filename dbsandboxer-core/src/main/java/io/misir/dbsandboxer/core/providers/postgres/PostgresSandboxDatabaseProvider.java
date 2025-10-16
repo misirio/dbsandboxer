@@ -4,7 +4,6 @@ import io.misir.dbsandboxer.core.api.SandboxDatabaseProvider;
 import io.misir.dbsandboxer.core.api.SandboxException;
 import java.sql.*;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -27,8 +26,7 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
     private static final Logger log =
             LoggerFactory.getLogger(PostgresSandboxDatabaseProvider.class);
 
-    private static final ConcurrentHashMap<String, AtomicBoolean> TEMPLATE_STATES =
-            new ConcurrentHashMap<>();
+    private static final AtomicBoolean TEMPLATE_READY = new AtomicBoolean(false);
     private static final Pattern SAFE_DB_NAME = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
     private static final int MIN_PORT = 1;
     private static final int MAX_PORT = 65535;
@@ -41,7 +39,6 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
 
     private final String primaryDatabaseName;
     private final String templateName;
-    private final AtomicBoolean templateReady;
 
     /**
      * Creates a new PostgreSQL sandbox database provider.
@@ -77,7 +74,6 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
         this.adminPassword = Objects.requireNonNull(adminPassword, "adminPassword cannot be null");
         this.primaryDatabaseName = validateDatabaseName(primaryDatabaseName, "primaryDatabaseName");
         this.templateName = validateDatabaseName(templateDatabaseName, "templateDatabaseName");
-        this.templateReady = TEMPLATE_STATES.computeIfAbsent(this.templateName, key -> new AtomicBoolean(false));
     }
 
     private static String validateDatabaseName(String name, String paramName) {
@@ -94,17 +90,17 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
 
     @Override
     public void prepareSandbox() {
-        if (templateReady.get()) {
+        if (TEMPLATE_READY.get() && templateExists()) {
             return;
         }
-        synchronized (templateReady) {
-            if (templateReady.get()) {
+        synchronized (TEMPLATE_READY) {
+            if (TEMPLATE_READY.get() && templateExists()) {
                 return;
             }
             if (!templateExists()) {
                 createTemplate();
             }
-            templateReady.set(true);
+            TEMPLATE_READY.set(true);
         }
     }
 
@@ -130,17 +126,12 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
 
     @Override
     public void cleanupSandbox() {
-        synchronized (templateReady) {
-            templateReady.set(false);
+        synchronized (TEMPLATE_READY) {
+            TEMPLATE_READY.set(false);
         }
-        try {
-            if (!templateExists()) {
-                return;
-            }
-        } finally {
-            TEMPLATE_STATES.remove(templateName, templateReady);
+        if (!templateExists()) {
+            return;
         }
-
         try (Connection admin = DriverManager.getConnection(adminUrl(), adminUser, adminPassword);
                 Statement s = admin.createStatement()) {
 
