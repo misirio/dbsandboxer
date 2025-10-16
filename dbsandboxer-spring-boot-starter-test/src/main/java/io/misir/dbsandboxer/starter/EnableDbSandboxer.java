@@ -65,4 +65,14 @@ public @interface EnableDbSandboxer {
      * @return the template database name, defaults to "template_database"
      */
     String templateDatabaseName() default "template_database";
+
+    /**
+     * The template database file for SQLite providers.
+     *
+     * <p>If left empty, the template file will be placed next to the SQLite database file using
+     * {@link #templateDatabaseName()} (with a <code>.db</code> suffix when no extension is provided).
+     *
+     * @return the SQLite template file path, relative to the database file's directory by default
+     */
+    String sqliteTemplateFile() default "";
 }

@@ -1,6 +1,6 @@
 # DbSandboxer
 
-**Fast, isolated database testing for Spring Boot applications using PostgreSQL's template database feature.**
+**Fast, isolated database testing for Spring Boot applications using PostgreSQL templates or SQLite snapshots.**
 
 
 Demo of 100 integration test executions with fresh PostgreSQL databases per test, post Spring Boot initialization:  
@@ -17,7 +17,7 @@ Testing with databases is painful:
 
 ## The Solution
 
-DbSandboxer gives each test its own database copy in ~50ms using PostgreSQL's template databases:
+DbSandboxer gives each test its own database copy in ~50ms using PostgreSQL template databases or SQLite file snapshots:
 
 ```java
 @Test
@@ -113,11 +113,37 @@ class OrderServiceTest {
 
 Check out the [Example project](examples/spring-boot-example) for a complete example.
 
+### SQLite Support
+
+DbSandboxer can also isolate tests for SQLite-based applications by copying database files.
+
+```java
+import io.misir.dbsandboxer.core.api.SandboxDatabaseProvider;
+import io.misir.dbsandboxer.core.providers.sqlite.SqliteSandboxDatabaseProvider;
+import java.nio.file.Path;
+
+@TestConfiguration(proxyBeanMethods = false)
+public class TestConfig {
+
+    @Bean
+    public SandboxDatabaseProvider sqliteSandboxProvider() {
+        Path dbFile = Path.of("build/test-database/app.db");
+        Path template = dbFile.resolveSibling("template-app.db");
+        return new SqliteSandboxDatabaseProvider(dbFile, template);
+    }
+}
+```
+
+When using the Spring Boot starter without defining your own provider bean, DbSandboxer will
+automatically detect a SQLite `DataSource`. You can customize the template file location with the
+`sqliteTemplateFile` attribute on `@EnableDbSandboxer`. If not specified, the template is created
+next to the database file using the value from `templateDatabaseName` and a `.db` extension.
+
 ## How It Works
 
-1. **Template Creation**: Before tests run, DbSandboxer creates a PostgreSQL template database with your schema
-2. **Fast Cloning**: Each test gets a fresh copy via `CREATE DATABASE ... WITH TEMPLATE` (file-level copy, not row-by-row)
-3. **Automatic Cleanup**: Databases are dropped after each test
+1. **Template Creation**: Before tests run, DbSandboxer creates a PostgreSQL template database (or copies your SQLite file) with your schema
+2. **Fast Cloning**: Each test gets a fresh copy via PostgreSQL's `CREATE DATABASE ... WITH TEMPLATE` or a SQLite file copy
+3. **Automatic Cleanup**: Databases are dropped or files replaced after each test
 
 This approach is blazing fast because PostgreSQL copies database files directly rather than executing SQL statements.
 

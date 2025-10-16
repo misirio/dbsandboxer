@@ -15,7 +15,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @DisplayName("PostgresSandboxDatabaseProvider Integration Tests")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PostgresSandboxDatabaseProviderTest {

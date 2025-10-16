@@ -3,6 +3,10 @@ package io.misir.dbsandboxer.starter;
 import io.misir.dbsandboxer.core.api.SandboxDatabaseProvider;
 import io.misir.dbsandboxer.core.api.SandboxException;
 import io.misir.dbsandboxer.core.providers.postgres.PostgresSandboxDatabaseProvider;
+import io.misir.dbsandboxer.core.providers.sqlite.SqliteSandboxDatabaseProvider;
+import java.net.URI;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import javax.sql.DataSource;
@@ -25,18 +29,28 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
         try {
             p = appCtx.getBean(SandboxDatabaseProvider.class);
         } catch (Exception noBean) {
-            // Fallback: derive a PostgresProvider from DataSource URL + annotation config
+            // Fallback: derive provider from DataSource URL + annotation config
             EnableDbSandboxer cfg = resolveConfiguration(ctx);
             DbUrlParts url = inspectUrl(ds);
-            p =
-                    new PostgresSandboxDatabaseProvider(
-                            url.host,
-                            url.port,
-                            cfg.maintenanceDb(),
-                            cfg.adminUser(),
-                            cfg.adminPassword(),
-                            url.primaryDatabaseName(),
-                            cfg.templateDatabaseName());
+            switch (url.type()) {
+                case POSTGRESQL ->
+                        p =
+                                new PostgresSandboxDatabaseProvider(
+                                        url.host(),
+                                        url.port(),
+                                        cfg.maintenanceDb(),
+                                        cfg.adminUser(),
+                                        cfg.adminPassword(),
+                                        url.primaryDatabaseName(),
+                                        cfg.templateDatabaseName());
+                case SQLITE -> {
+                    Path template = resolveTemplatePath(url.sqlitePath(), cfg);
+                    p = new SqliteSandboxDatabaseProvider(url.sqlitePath(), template);
+                }
+                default ->
+                        throw new SandboxException(
+                                "Unsupported database type for DbSandboxer: " + url.type());
+            }
         }
         this.provider = p;
         this.provider.prepareSandbox();
@@ -45,7 +59,7 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
     @Override
     public void beforeEach(ExtensionContext ctx) {
         if (provider == null) {
-            throw new SandboxException("No PostgreSQL database provider available");
+            throw new SandboxException("No SandboxDatabaseProvider available");
         }
         provider.rebuildSandbox();
     }
@@ -85,31 +99,94 @@ public final class DbSandboxSpringExtension implements BeforeAllCallback, Before
     private static DbUrlParts inspectUrl(DataSource ds) throws SQLException {
         try (Connection c = ds.getConnection()) {
             String url = c.getMetaData().getURL();
-            // expected: jdbc:postgresql://host:port/dbname[?params]
             if (url == null) throw new SQLException("DataSource URL is null");
-            String noPrefix = url;
-            int idx = noPrefix.indexOf("://");
-            if (idx >= 0) noPrefix = noPrefix.substring(idx + 3);
-            // now noPrefix = host:port/dbname?...
-            String hostPortDb = noPrefix;
-            int slash = hostPortDb.indexOf('/');
-            String hostPort = slash > 0 ? hostPortDb.substring(0, slash) : hostPortDb;
-            String primaryDatabaseName = slash > 0 ? hostPortDb.substring(slash + 1) : "";
-            int q = primaryDatabaseName.indexOf('?');
-            if (q >= 0) primaryDatabaseName = primaryDatabaseName.substring(0, q);
-            String host = hostPort;
-            int colon = hostPort.indexOf(':');
-            int port = 5432;
-            if (colon > 0) {
-                host = hostPort.substring(0, colon);
-                try {
-                    port = Integer.parseInt(hostPort.substring(colon + 1));
-                } catch (NumberFormatException ignore) {
-                }
+            if (url.startsWith("jdbc:postgresql:")) {
+                return parsePostgresUrl(url);
             }
-            return new DbUrlParts(host, port, primaryDatabaseName);
+            if (url.startsWith("jdbc:sqlite:")) {
+                Path sqlitePath = parseSqlitePath(url);
+                return new DbUrlParts(DatabaseType.SQLITE, null, 0, null, sqlitePath);
+            }
+            throw new SandboxException("Unsupported JDBC URL: " + url);
         }
     }
 
-    private record DbUrlParts(String host, int port, String primaryDatabaseName) {}
+    private static DbUrlParts parsePostgresUrl(String url) {
+        String noPrefix = url;
+        int idx = noPrefix.indexOf("://");
+        if (idx >= 0) noPrefix = noPrefix.substring(idx + 3);
+        String hostPortDb = noPrefix;
+        int slash = hostPortDb.indexOf('/');
+        String hostPort = slash > 0 ? hostPortDb.substring(0, slash) : hostPortDb;
+        String primaryDatabaseName = slash > 0 ? hostPortDb.substring(slash + 1) : "";
+        int q = primaryDatabaseName.indexOf('?');
+        if (q >= 0) primaryDatabaseName = primaryDatabaseName.substring(0, q);
+        String host = hostPort;
+        int colon = hostPort.indexOf(':');
+        int port = 5432;
+        if (colon > 0) {
+            host = hostPort.substring(0, colon);
+            try {
+                port = Integer.parseInt(hostPort.substring(colon + 1));
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return new DbUrlParts(DatabaseType.POSTGRESQL, host, port, primaryDatabaseName, null);
+    }
+
+    private static Path parseSqlitePath(String url) {
+        String pathPart = url.substring("jdbc:sqlite:".length());
+        int queryIndex = pathPart.indexOf('?');
+        if (queryIndex >= 0) {
+            pathPart = pathPart.substring(0, queryIndex);
+        }
+        if (pathPart.isBlank() || ":memory:".equals(pathPart)) {
+            throw new SandboxException("SQLite in-memory databases are not supported for sandboxing");
+        }
+        if (pathPart.startsWith("file:")) {
+            try {
+                URI uri = URI.create(pathPart);
+                return Path.of(uri).toAbsolutePath().normalize();
+            } catch (RuntimeException e) {
+                throw new SandboxException("Invalid SQLite file URI: " + pathPart, e);
+            }
+        }
+        try {
+            return Path.of(pathPart).toAbsolutePath().normalize();
+        } catch (InvalidPathException e) {
+            throw new SandboxException("Invalid SQLite database path: " + pathPart, e);
+        }
+    }
+
+    private static Path resolveTemplatePath(Path databaseFile, EnableDbSandboxer cfg) {
+        String candidate = cfg.sqliteTemplateFile();
+        if (candidate == null || candidate.isBlank()) {
+            candidate = cfg.templateDatabaseName();
+            if (candidate == null || candidate.isBlank()) {
+                candidate = "template_database.db";
+            } else if (!candidate.contains(".")) {
+                candidate = candidate + ".db";
+            }
+        }
+        try {
+            Path template = Path.of(candidate);
+            Path normalizedDb = databaseFile.toAbsolutePath().normalize();
+            if (!template.isAbsolute()) {
+                template = normalizedDb.resolveSibling(template).normalize();
+            } else {
+                template = template.normalize();
+            }
+            return template;
+        } catch (InvalidPathException e) {
+            throw new SandboxException("Invalid SQLite template path: " + candidate, e);
+        }
+    }
+
+    private enum DatabaseType {
+        POSTGRESQL,
+        SQLITE
+    }
+
+    private record DbUrlParts(
+            DatabaseType type, String host, int port, String primaryDatabaseName, Path sqlitePath) {}
 }
