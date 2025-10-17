@@ -90,11 +90,11 @@ public final class PostgresSandboxDatabaseProvider implements SandboxDatabasePro
 
     @Override
     public void prepareSandbox() {
-        if (TEMPLATE_READY.get() && templateExists()) {
+        if (TEMPLATE_READY.get()) {
             return;
         }
         synchronized (TEMPLATE_READY) {
-            if (TEMPLATE_READY.get() && templateExists()) {
+            if (TEMPLATE_READY.get()) {
                 return;
             }
             if (!templateExists()) {

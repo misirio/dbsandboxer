@@ -7,7 +7,7 @@ databaseChangeLog:
       context: test
       changes:
         - sqlFile:
-            path: ../sql/postgres/test-fixtures.sql
+            path: test-fixtures.sql
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;

@@ -72,10 +72,15 @@ public final class DbSandboxSpringExtension
 
     @Override
     public void afterAll(ExtensionContext context) {
-        if (provider != null
-                && configuration != null
-                && configuration.dropTemplateDatabase()) {
-            provider.cleanupSandbox();
+        if (provider == null) {
+            return;
+        }
+        try {
+            provider.rebuildSandbox();
+        } finally {
+            if (configuration != null && configuration.dropTemplateDatabase()) {
+                provider.cleanupSandbox();
+            }
         }
     }
 

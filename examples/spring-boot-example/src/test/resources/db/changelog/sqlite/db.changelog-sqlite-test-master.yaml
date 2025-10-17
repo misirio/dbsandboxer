@@ -8,7 +8,7 @@ databaseChangeLog:
       runInTransaction: false
       changes:
         - sqlFile:
-            path: ../sql/sqlite/test-fixtures.sql
+            path: test-fixtures.sql
             relativeToChangelogFile: true
             splitStatements: true
             endDelimiter: ;
